@@ -28,4 +28,4 @@ COPY --from=build /app/dist ./dist
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate dev --name init && npx prisma generate && npx prisma db push && npm run start:prod"]
+CMD ["sh", "-c", "npx prisma generate && npm run start:prod"]
