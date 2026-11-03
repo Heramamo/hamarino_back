@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client"
+  output  = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Verdict {
+  CONFIRMED
+  DISPUTED
+}
+
+enum  Role {
+  ADMIN
+  PERSONAL
+}
+
+enum  Status{
+  VALIDATE
+  PENDING
+  REFUSED
+}
+
+enum PostStatus {
+  NEW
+  IN_PROGRESS
+  CONFIRMED
+  CONTRADICTED
+  PARTIALLY_TRUE
+  MISLEADING
+  MISSING_CONTEXT
+}
+
+enum RelationType {
+  SUPPORTS
+  CONTRADICTS
+}
+
+enum CommentStance {
+  FOR
+  AGAINST
+}
+
+enum EvidenceType {
+  DIRECT_WITNESS
+  DOCUMENT
+  OFFICIAL_SOURCE
+  LINK
+  PHOTO
+  VIDEO
+}
+
+model Media {
+  id       Int     @id @default(autoincrement()) @map("media_id")
+  name     String
+  mediaType String @map("media_type")
+  city     String?
+  website  String?
+  users    User[]
+
+  @@map("media")
+}
+
+model Topic {
+  id    Int    @id @default(autoincrement()) @map("topic_id")
+  label String @unique
+  articles Article[]
+
+  @@map("topic")
+}
+
+
+
+model User {
+  id                 Int       @id @default(autoincrement()) @map("user_id")
+  name               String
+  email              String    @unique
+  passwordHash       String    @map("password_hash")
+  role               Role      @default(PERSONAL)
+  status             Status    @default(PENDING)
+  reputation         Int       @default(0)
+  registeredAt       DateTime  @default(now()) @map("registered_at")
+  verified           Boolean   @default(false)
+  proofFrontUrl      String?   @map("proof_front_url")
+  proofBackUrl       String?   @map("proof_back_url")
+  emailVerifiedAt    DateTime? @map("email_verified_at")
+  emailCodeHash      String?   @map("email_code_hash")
+  emailCodeExpiresAt DateTime? @map("email_code_expires_at")
+  emailCodeSentAt    DateTime? @map("email_code_sent_at")
+  emailCodeAttempts  Int       @default(0) @map("email_code_attempts")
+
+  mediaId Int?  @map("media_id")
+  media   Media? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+
+  articles             Article[]
+  verifications        Verification[]
+  evidences            Evidence[]
+  comments             Comment[]
+  externalPublications ExternalPublication[]
+
+  @@index([mediaId])
+  @@index([status])
+  @@map("user")
+}
+
+model Article {
+  id              Int           @id @default(autoincrement()) @map("article_id")
+  title           String
+  content         String
+  location        String?
+  eventDate       DateTime?     @map("event_date")
+  coverImageUrl   String?       @map("cover_image_url")
+  publishedAt     DateTime      @default(now()) @map("published_at")
+  status          PostStatus    @default(NEW)
+  confidenceScore Float?        @map("confidence_score")
+  relationType    RelationType? @map("relation_type")
+
+  authorId       Int  @map("author_id")
+  topicId        Int  @map("topic_id")
+  parentArticleId Int? @map("parent_article_id")
+
+  author User  @relation(fields: [authorId], references: [id])
+  topic  Topic @relation(fields: [topicId], references: [id])
+
+  parent   Article?  @relation("ArticleParent", fields: [parentArticleId], references: [id], onDelete: Restrict)
+  children Article[] @relation("ArticleParent")
+
+  verifications        Verification[]
+  evidences            Evidence[]
+  comments             Comment[]
+  externalPublications ExternalPublication[]
+  images               Image[]
+
+  @@index([authorId])
+  @@index([topicId])
+  @@index([parentArticleId])
+  @@map("article")
+}
+
+model Verification {
+  id            Int      @id @default(autoincrement()) @map("verification_id")
+  verdict       Verdict
+  justification String
+  verifiedAt    DateTime @default(now()) @map("verified_at")
+
+  userId    Int @map("user_id")
+  articleId Int @map("article_id")
+
+  user    User    @relation(fields: [userId], references: [id])
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  evidences Evidence[]
+
+  @@unique([userId, articleId])
+  @@index([articleId])
+  @@map("verification")
+}
+
+model Evidence {
+  id          Int          @id @default(autoincrement()) @map("evidence_id")
+  type        EvidenceType
+  url         String?
+  file        String?
+  description String?
+  addedAt     DateTime     @default(now()) @map("added_at")
+
+  userId         Int  @map("user_id")
+  articleId      Int  @map("article_id")
+  verificationId Int? @map("verification_id")
+
+  user         User          @relation(fields: [userId], references: [id])
+  article      Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  verification Verification? @relation(fields: [verificationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([articleId])
+  @@index([verificationId])
+  @@map("evidence")
+}
+
+model Comment {
+  id            Int           @id @default(autoincrement()) @map("comment_id")
+  content       String
+  stance        CommentStance
+  justification String
+  commentedAt   DateTime      @default(now()) @map("commented_at")
+
+  userId    Int @map("user_id")
+  articleId Int @map("article_id")
+
+  user    User    @relation(fields: [userId], references: [id])
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([articleId])
+  @@map("comment")
+}
+
+model ExternalPublication {
+  id              Int       @id @default(autoincrement()) @map("publication_id")
+  platform        String
+  url             String
+  authorName      String?   @map("author_name")
+  authorType      String?   @map("author_type")
+  excerpt         String?
+  externalPostedAt DateTime? @map("external_posted_at")
+  collectedAt     DateTime  @default(now()) @map("collected_at")
+
+  articleId Int @map("article_id")
+  userId    Int @map("user_id")
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  images    Image[]
+  analyses  AiAnalysis[]
+
+  @@index([articleId])
+  @@index([userId])
+  @@map("external_publication")
+}
+
+model Image {
+  id              Int       @id @default(autoincrement()) @map("image_id")
+  fileUrl         String    @map("file_url")
+  perceptualHash  String?   @map("perceptual_hash")
+  firstSeenAt     DateTime? @map("first_seen_at")
+
+  articleId     Int? @map("article_id")
+  publicationId Int? @map("publication_id")
+
+  article     Article?               @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  publication ExternalPublication? @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  analyses AiAnalysis[]
+
+  @@index([articleId])
+  @@index([publicationId])
+  @@index([perceptualHash])
+  @@map("image")
+}
+
+model AiAnalysis {
+  id          Int      @id @default(autoincrement()) @map("analysis_id")
+  aiScore     Float    @map("ai_score")
+  modelUsed   String   @map("model_used")
+  detail      Json?
+  analyzedAt  DateTime @default(now()) @map("analyzed_at")
+
+  publicationId Int? @map("publication_id")
+  imageId       Int? @map("image_id")
+
+  publication ExternalPublication? @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  image       Image?               @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId])
+  @@index([imageId])
+  @@map("ai_analysis")
+}
+
+model NewsWatchItem {
+  id          Int       @id @default(autoincrement()) @map("watch_item_id")
+  providerId  String    @unique @map("provider_id")
+  title       String
+  description String?   @db.Text
+  link        String    @db.Text
+  sourceId    String?   @map("source_id")
+  sourceName  String?   @map("source_name")
+  sourceUrl   String?   @map("source_url") @db.Text
+  language    String?
+  country     String[]  @default([])
+  categories  String[]  @default([])
+  imageUrl    String?   @map("image_url") @db.Text
+  sentiment   String?
+  publishedAt DateTime? @map("published_at")
+  fetchedAt   DateTime  @default(now()) @map("fetched_at")
+
+  @@index([publishedAt])
+  @@index([sourceId])
+  @@map("news_watch_item")
+}
